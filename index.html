@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arena Multiplayer Online - Room Code Game</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- PeerJS CDN for WebRTC P2P Multiplayer -->
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  
+  <!-- Custom Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+          },
+          animation: {
+            'bounce-slow': 'bounce 2s infinite',
+            'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: radial-gradient(circle at top left, #0f172a, #1e1b4b, #020617);
+      min-height: 100vh;
+    }
+    
+    .glass-card {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    }
+
+    .glass-card-sm {
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .neon-glow-blue {
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+    }
+
+    .neon-glow-purple {
+      box-shadow: 0 0 20px rgba(168, 85, 247, 0.5);
+    }
+
+    /* Custom Scrollbar for Chat */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.5);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(99, 102, 241, 0.5);
+      border-radius: 4px;
+    }
+
+    /* Confetti Canvas overlay */
+    #confettiCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body class="text-slate-100 flex flex-col min-h-screen relative overflow-x-hidden">
+
+  <!-- Canvas for Confetti Animations -->
+  <canvas id="confettiCanvas"></canvas>
+
+  <!-- Top Navigation Header -->
+  <header class="w-full px-6 py-4 flex items-center justify-between border-b border-slate-800/80 bg-slate-950/40 backdrop-blur-md sticky top-0 z-40">
+    <div class="flex items-center gap-3 cursor-pointer" onclick="goHome()">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-violet-600 to-pink-500 flex items-center justify-center text-white text-xl font-black shadow-lg shadow-indigo-500/30">
+        <i class="fa-solid fa-gamepad"></i>
+      </div>
+      <div>
+        <h1 class="text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400">PlaySphere</h1>
+        <p class="text-xs text-slate-400 font-medium">Multiplayer Room Hub</p>
+      </div>
+    </div>
+
+    <!-- Active Profile Badge -->
+    <div class="flex items-center gap-3 bg-slate-800/80 hover:bg-slate-800 px-3 py-1.5 rounded-full border border-slate-700/60 transition cursor-pointer" onclick="openProfileModal()">
+      <div id="userAvatarBadge" class="w-7 h-7 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-sm">
+        😎
+      </div>
+      <span id="userNameBadge" class="text-sm font-semibold text-slate-200">Pemain 1</span>
+      <i class="fa-solid fa-gear text-slate-400 text-xs ml-1"></i>
+    </div>
+  </header>
+
+  <!-- Notification Toast Container -->
+  <div id="toastContainer" class="fixed top-20 right-6 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
+
+  <!-- Main Dynamic Container -->
+  <main class="flex-1 max-w-6xl w-full mx-auto p-4 md:p-6 flex flex-col items-center justify-center">
+
+    <!-- SECTION 1: LOBBY & ROOM CREATION -->
+    <section id="lobbyScreen" class="w-full max-w-xl space-y-6">
+      
+      <!-- Welcome Hero Banner -->
+      <div class="text-center space-y-2">
+        <span class="px-3 py-1 text-xs font-bold rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 inline-flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> Realtime P2P & Multi-Tab Sync
+        </span>
+        <h2 class="text-3xl md:text-4xl font-extrabold text-white">Main Bersama Teman Lengkap Kode Ruangan</h2>
+        <p class="text-slate-400 text-sm max-w-md mx-auto">Buat ruangan baru, dapatkan kode unik 6-digit, atau gabung ke ruangan teman dalam hitungan detik.</p>
+      </div>
+
+      <!-- Action Card -->
+      <div class="glass-card rounded-3xl p-6 md:p-8 space-y-6">
+        
+        <!-- Tab Selector: Online Multiplayer vs Local Play -->
+        <div class="flex p-1 bg-slate-900/80 rounded-2xl border border-slate-800">
+          <button id="tabOnlineBtn" onclick="switchLobbyTab('online')" class="flex-1 py-2.5 rounded-xl font-bold text-sm transition text-white bg-indigo-600 shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2">
+            <i class="fa-solid fa-wifi text-xs"></i> Online (Kode Ruangan)
+          </button>
+          <button id="tabLocalBtn" onclick="switchLobbyTab('local')" class="flex-1 py-2.5 rounded-xl font-bold text-sm transition text-slate-400 hover:text-white flex items-center justify-center gap-2">
+            <i class="fa-solid fa-user-group text-xs"></i> Mode Pass & Play
+          </button>
+        </div>
+
+        <!-- Online Mode Controls -->
+        <div id="onlineTabContent" class="space-y-6">
+          
+          <!-- Create Room Block -->
+          <div class="bg-gradient-to-r from-indigo-950/50 to-purple-950/50 p-5 rounded-2xl border border-indigo-500/20 space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="font-bold text-indigo-200">Buat Ruangan Baru</h3>
+                <p class="text-xs text-slate-400">Menjadi Host & tentukan jenis permainan</p>
+              </div>
+              <div class="p-3 bg-indigo-600/20 rounded-xl text-indigo-400 text-xl">
+                <i class="fa-solid fa-plus"></i>
+              </div>
+            </div>
+            
+            <button onclick="createNewRoom()" class="w-full py-3.5 px-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/30 active:scale-[0.99] transition flex items-center justify-center gap-2">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> Generate Kode Ruangan Baru
+            </button>
+          </div>
+
+          <div class="relative flex items-center justify-center">
+            <hr class="w-full border-slate-800">
+            <span class="absolute bg-slate-900 px-3 text-xs text-slate-500 font-semibold uppercase tracking-wider">Atau Gabung Kode</span>
+          </div>
+
+          <!-- Join Room Block -->
+          <div class="space-y-3">
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400">Masukkan Kode Ruangan</label>
+            <div class="flex gap-2">
+              <input type="text" id="joinCodeInput" placeholder="Contoh: 8A2F9B" uppercase maxlength="6" class="flex-1 bg-slate-900/90 border border-slate-700/80 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 rounded-xl px-4 py-3 font-mono text-lg tracking-widest font-bold text-slate-100 placeholder:text-slate-600 placeholder:font-sans uppercase outline-none transition">
+              <button onclick="joinRoomByInput()" class="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition active:scale-[0.98] flex items-center gap-2">
+                <span>Gabung</span>
+                <i class="fa-solid fa-arrow-right text-sm"></i>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Local Pass & Play Mode -->
+        <div id="localTabContent" class="hidden space-y-5 text-center py-4">
+          <div class="p-4 bg-slate-900/60 rounded-2xl border border-slate-800">
+            <i class="fa-solid fa-mobile-screen-button text-3xl text-purple-400 mb-2"></i>
+            <h3 class="font-bold text-slate-200">Main 2 Pemain Dalam 1 Perangkat</h3>
+            <p class="text-xs text-slate-400 mt-1">Sangat cocok untuk latihan atau bermain berdampingan tanpa internet.</p>
+          </div>
+          <button onclick="startLocalMatch()" class="w-full py-3.5 px-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl shadow-lg shadow-purple-600/30 transition active:scale-[0.99] flex items-center justify-center gap-2">
+            <i class="fa-solid fa-play"></i> Mulai Game Lokal Sekarang
+          </button>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- SECTION 2: ROOM WAITING LOBBY (HOST / GUEST CONNECTED) -->
+    <section id="roomLobbyScreen" class="hidden w-full max-w-3xl space-y-6">
+      
+      <!-- Room Code Banner Header -->
+      <div class="glass-card rounded-3xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div class="space-y-1 text-center md:text-left">
+          <span id="playerRoleBadge" class="px-3 py-1 text-xs font-bold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+            Anda: HOST
+          </span>
+          <h2 class="text-2xl font-black text-white flex items-center justify-center md:justify-start gap-2">
+            Ruangan Siap
+          </h2>
+          <p class="text-xs text-slate-400">Bagikan kode di bawah ini kepada lawan Anda.</p>
+        </div>
+
+        <!-- Room Code Copy Box -->
+        <div class="bg-slate-950/80 p-3 rounded-2xl border border-slate-800 flex items-center gap-4">
+          <div class="pl-2">
+            <span class="block text-[10px] uppercase tracking-wider font-bold text-slate-500">KODE RUANGAN</span>
+            <span id="displayRoomCode" class="font-mono text-2xl md:text-3xl font-extrabold tracking-widest text-indigo-400">XXXXXX</span>
+          </div>
+          <button onclick="copyRoomCode()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-bold rounded-xl transition flex items-center gap-2">
+            <i class="fa-solid fa-copy"></i>
+            <span id="copyCodeBtnText">Salin Kode</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Players Status Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Player 1 (Host) Card -->
+        <div id="hostPlayerCard" class="glass-card-sm p-5 rounded-2xl flex items-center gap-4 border-l-4 border-l-indigo-500">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-600/30 text-indigo-400 text-2xl flex items-center justify-center font-bold">
+            👑
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center gap-2">
+              <span id="hostNameLabel" class="font-bold text-white">Host</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold">Host</span>
+            </div>
+            <p id="hostStatusLabel" class="text-xs text-emerald-400 font-semibold mt-0.5">● Terhubung</p>
+          </div>
+        </div>
+
+        <!-- Player 2 (Guest) Card -->
+        <div id="guestPlayerCard" class="glass-card-sm p-5 rounded-2xl flex items-center gap-4 border-l-4 border-l-slate-700">
+          <div id="guestAvatarBox" class="w-12 h-12 rounded-2xl bg-slate-800 text-slate-500 text-2xl flex items-center justify-center font-bold">
+            <i class="fa-solid fa-user-plus text-lg"></i>
+          </div>
+          <div class="flex-1">
+            <span id="guestNameLabel" class="font-bold text-slate-400">Menunggu Lawan...</span>
+            <p id="guestStatusLabel" class="text-xs text-slate-500 mt-0.5">Berikan kode untuk bergabung</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Select Game Mode (Host Only) -->
+      <div id="gameSelectionPanel" class="glass-card rounded-3xl p-6 space-y-4">
+        <h3 class="font-extrabold text-lg text-white flex items-center gap-2">
+          <i class="fa-solid fa-dice text-indigo-400"></i> Pilih Permainan
+        </h3>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          
+          <!-- Option 1: Tic Tac Toe -->
+          <div onclick="selectGameType('tictactoe')" id="gameOpt-tictactoe" class="game-opt-card p-4 rounded-2xl bg-slate-900/80 border-2 border-indigo-500 cursor-pointer hover:border-indigo-400 transition space-y-2">
+            <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-xl">
+              ❌
+            </div>
+            <div>
+              <h4 class="font-bold text-white text-sm">Tic-Tac-Toe</h4>
+              <p class="text-xs text-slate-400">Klasik 3x3 / 4x4 strategi cepat.</p>
+            </div>
+          </div>
+
+          <!-- Option 2: Connect 4 -->
+          <div onclick="selectGameType('connect4')" id="gameOpt-connect4" class="game-opt-card p-4 rounded-2xl bg-slate-900/80 border-2 border-slate-800 cursor-pointer hover:border-indigo-400 transition space-y-2">
+            <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xl">
+              🟡
+            </div>
+            <div>
+              <h4 class="font-bold text-white text-sm">Connect 4</h4>
+              <p class="text-xs text-slate-400">Susun 4 koin beruntun secara vertikal/horizontal.</p>
+            </div>
+          </div>
+
+          <!-- Option 3: Dots & Boxes -->
+          <div onclick="selectGameType('dots')" id="gameOpt-dots" class="game-opt-card p-4 rounded-2xl bg-slate-900/80 border-2 border-slate-800 cursor-pointer hover:border-indigo-400 transition space-y-2">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xl">
+              🔳
+            </div>
+            <div>
+              <h4 class="font-bold text-white text-sm">Dots & Boxes</h4>
+              <p class="text-xs text-slate-400">Hubungkan titik dan perebutkan kotak terbanyak.</p>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Start Game Trigger -->
+        <div class="pt-2 flex items-center justify-between">
+          <p id="waitingNoticeText" class="text-xs text-amber-400 font-semibold animate-pulse">
+            ⚠️ Menunggu pemain kedua bergabung...
+          </p>
+          <button id="startGameBtn" disabled onclick="hostStartGame()" class="px-8 py-3.5 bg-slate-700 text-slate-400 cursor-not-allowed font-extrabold rounded-xl transition shadow-lg flex items-center gap-2">
+            <i class="fa-solid fa-play"></i> Mulai Game
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- SECTION 3: LIVE GAMEPLAY ARENA -->
+    <section id="gameplayScreen" class="hidden w-full max-w-4xl space-y-6">
+      
+      <!-- Game Top Info Bar -->
+      <div class="glass-card rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+        
+        <!-- Player 1 Score -->
+        <div id="p1ScoreBox" class="flex items-center gap-3 px-4 py-2 rounded-xl bg-indigo-950/60 border border-indigo-500/30 w-full md:w-auto justify-center md:justify-start">
+          <span id="p1Avatar" class="text-2xl">😎</span>
+          <div>
+            <span id="p1Name" class="block font-bold text-xs text-indigo-300">Pemain 1</span>
+            <span id="p1Score" class="text-xl font-extrabold text-white">Skor: 0</span>
+          </div>
+        </div>
+
+        <!-- Match Status / Turn Info -->
+        <div class="text-center space-y-1">
+          <span id="gameTitleHeader" class="text-xs font-bold uppercase tracking-wider text-slate-400">TIC-TAC-TOE</span>
+          <div id="turnBadge" class="px-4 py-1.5 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold text-sm border border-emerald-500/40 flex items-center justify-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            <span id="turnText">Giliran Anda!</span>
+          </div>
+        </div>
+
+        <!-- Player 2 Score -->
+        <div id="p2ScoreBox" class="flex items-center gap-3 px-4 py-2 rounded-xl bg-pink-950/60 border border-pink-500/30 w-full md:w-auto justify-center md:justify-start">
+          <div>
+            <span id="p2Name" class="block font-bold text-xs text-pink-300 text-right">Pemain 2</span>
+            <span id="p2Score" class="text-xl font-extrabold text-white text-right">Skor: 0</span>
+          </div>
+          <span id="p2Avatar" class="text-2xl">🤖</span>
+        </div>
+
+      </div>
+
+      <!-- Main Play Area Grid (Game Board + Side Chat) -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        
+        <!-- Game Board Container -->
+        <div class="lg:col-span-2 glass-card rounded-3xl p-6 flex flex-col items-center justify-center min-h-[380px] relative">
+          
+          <!-- Dynamic Game Board Injector -->
+          <div id="dynamicBoardContainer" class="w-full flex justify-center items-center py-4">
+            <!-- Game dynamic grid will be generated here by JS -->
+          </div>
+
+          <!-- Bottom In-Game Controls -->
+          <div class="w-full mt-4 pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+            <button onclick="confirmLeaveGame()" class="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition font-semibold flex items-center gap-1.5">
+              <i class="fa-solid fa-door-open"></i> Keluar Ruangan
+            </button>
+            <button onclick="resetMatchBoard()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition font-semibold flex items-center gap-1.5">
+              <i class="fa-solid fa-rotate-left"></i> Reset Papan
+            </button>
+          </div>
+        </div>
+
+        <!-- Live In-Game Chat Box -->
+        <div class="glass-card rounded-3xl p-4 flex flex-col h-[380px] space-y-3">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+            <h4 class="font-bold text-sm text-white flex items-center gap-2">
+              <i class="fa-solid fa-comments text-indigo-400"></i> Live Chat
+            </h4>
+            <span id="chatStatusIndicator" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          </div>
+
+          <!-- Chat Messages Scroll Container -->
+          <div id="chatMessages" class="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
+            <div class="bg-indigo-500/10 text-indigo-300 p-2 rounded-xl text-[11px] text-center border border-indigo-500/20">
+              💬 Obrolan langsung diaktifkan. Berkomunikasi dengan lawan Anda!
+            </div>
+          </div>
+
+          <!-- Quick Emoji Row -->
+          <div class="flex gap-1 overflow-x-auto py-1">
+            <button onclick="sendQuickEmoji('👏')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm">👏</button>
+            <button onclick="sendQuickEmoji('🔥')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm">🔥</button>
+            <button onclick="sendQuickEmoji('😎')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm">😎</button>
+            <button onclick="sendQuickEmoji('😱')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm">😱</button>
+            <button onclick="sendQuickEmoji('GG')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold text-indigo-300">GG!</button>
+          </div>
+
+          <!-- Chat Input Form -->
+          <div class="flex gap-2">
+            <input type="text" id="chatInput" placeholder="Ketik pesan..." class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500">
+            <button onclick="sendChatMessage()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold">
+              <i class="fa-solid fa-paper-plane"></i>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- MODAL: PROFILE & NICKNAME CUSTOMIZATION -->
+  <div id="profileModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-card max-w-sm w-full rounded-3xl p-6 space-y-5 animate-in fade-in zoom-in duration-200">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="font-extrabold text-white">Profil Pemain</h3>
+        <button onclick="closeProfileModal()" class="text-slate-400 hover:text-white">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Avatar Selector -->
+      <div class="space-y-2">
+        <label class="block text-xs font-bold text-slate-400 uppercase">Pilih Avatar</label>
+        <div class="grid grid-cols-5 gap-2">
+          <button onclick="setAvatar('😎')" class="avatar-opt p-2 text-2xl rounded-xl bg-slate-800 hover:bg-indigo-600/30 transition">😎</button>
+          <button onclick="setAvatar('👾')" class="avatar-opt p-2 text-2xl rounded-xl bg-slate-800 hover:bg-indigo-600/30 transition">👾</button>
+          <button onclick="setAvatar('🐱')" class="avatar-opt p-2 text-2xl rounded-xl bg-slate-800 hover:bg-indigo-600/30 transition">🐱</button>
+          <button onclick="setAvatar('🔥')" class="avatar-opt p-2 text-2xl rounded-xl bg-slate-800 hover:bg-indigo-600/30 transition">🔥</button>
+          <button onclick="setAvatar('🚀')" class="avatar-opt p-2 text-2xl rounded-xl bg-slate-800 hover:bg-indigo-600/30 transition">🚀</button>
+        </div>
+      </div>
+
+      <!-- Nickname Input -->
+      <div class="space-y-2">
+        <label class="block text-xs font-bold text-slate-400 uppercase">Nama Panggilan</label>
+        <input type="text" id="nicknameInput" value="Pemain 1" maxlength="12" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm font-bold text-white outline-none focus:border-indigo-500">
+      </div>
+
+      <button onclick="saveProfile()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 font-bold text-white rounded-xl text-sm transition">
+        Simpan Perubahan
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL: MATCH RESULT ANNOUNCEMENT -->
+  <div id="resultModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-card max-w-sm w-full rounded-3xl p-6 text-center space-y-5 border-2 border-indigo-500/40">
+      <div id="resultIcon" class="text-6xl animate-bounce-slow">🏆</div>
+      <div class="space-y-1">
+        <h3 id="resultTitle" class="text-2xl font-black text-white">PEMENANG!</h3>
+        <p id="resultSubtitle" class="text-sm text-slate-300">Pemain 1 berhasil menguasai papan permainan!</p>
+      </div>
+
+      <div class="flex gap-2 pt-2">
+        <button onclick="requestRematch()" class="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm rounded-xl transition shadow-lg shadow-indigo-600/30">
+          <i class="fa-solid fa-rotate-right mr-1"></i> Main Lagi
+        </button>
+        <button onclick="closeResultModalAndLobby()" class="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm rounded-xl transition">
+          Ke Lobby
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- APP STATE ENGINE ---
+    const appState = {
+      user: {
+        id: 'user_' + Math.random().toString(36).substring(2, 8),
+        name: 'Pemain 1',
+        avatar: '😎'
+      },
+      mode: 'online', // 'online' or 'local'
+      role: 'host', // 'host' or 'guest'
+      roomCode: '',
+      peer: null,
+      conn: null,
+      broadcastChannel: null,
+      useBroadcastFallback: false,
+      selectedGame: 'tictactoe', // 'tictactoe', 'connect4', 'dots'
+      scores: { p1: 0, p2: 0 },
+      isMyTurn: false,
+      mySymbol: 'X', // 'X' or 'O' for tictactoe, 'RED' or 'YELLOW' for connect4
+      
+      // Board states
+      tictactoeBoard: Array(9).fill(''),
+      connect4Board: Array(42).fill(''), // 6 rows x 7 cols
+      dotsBoard: { lines: {}, boxes: {} },
+      
+      opponent: {
+        name: 'Menunggu...',
+        avatar: '👤'
+      }
+    };
+
+    // Global Catch for Canvas / Sandbox Security Error on WebSockets
+    window.addEventListener('error', (event) => {
+      if (event.message && (event.message.includes('WebSocket') || event.message.includes('SecurityError'))) {
+        console.warn('Caught WebSocket SecurityError from Sandbox environment. Switching to BroadcastChannel fallback.');
+        if (!appState.useBroadcastFallback && appState.roomCode) {
+          enableBroadcastFallback();
+        }
+        event.preventDefault();
+      }
+    });
+
+    // Web Audio Synthesizer (No external audio files needed)
+    const AudioEngine = {
+      ctx: null,
+      init() {
+        if (!this.ctx) {
+          this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+      },
+      playMove() {
+        this.init();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.08);
+      },
+      playWin() {
+        this.init();
+        const notes = [523.25, 659.25, 783.99, 1046.50];
+        notes.forEach((freq, idx) => {
+          setTimeout(() => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.2);
+          }, idx * 100);
+        });
+      }
+    };
+
+    // --- MULTIPLAYER CONTROLLER WITH BROADCASTCHANNEL FALLBACK ---
+    function initPeerServer(customId = null) {
+      if (appState.peer) {
+        try { appState.peer.destroy(); } catch(e){}
+      }
+
+      showToast('Menghubungkan ke server ruangan...', 'info');
+
+      try {
+        appState.peer = new Peer(customId, { debug: 1 });
+
+        appState.peer.on('open', (id) => {
+          console.log('Peer ID Terbuat:', id);
+          if (appState.role === 'host') {
+            showToast('Ruangan berhasil dibuat! Bagikan kode.', 'success');
+            setupBroadcastChannel(); // Prepare fallback listener in background
+          }
+        });
+
+        // Handle Incoming Connection (as Host)
+        appState.peer.on('connection', (connection) => {
+          appState.conn = connection;
+          setupDataListeners();
+
+          appState.conn.on('open', () => {
+            sendPeerData({
+              type: 'PROFILE_HANDSHAKE',
+              name: appState.user.name,
+              avatar: appState.user.avatar
+            });
+
+            updateGuestCardConnected();
+            enableHostStartButton();
+            showToast('Lawan berhasil bergabung ke ruangan!', 'success');
+          });
+        });
+
+        appState.peer.on('error', (err) => {
+          console.warn('PeerJS Error, enabling BroadcastChannel fallback:', err);
+          enableBroadcastFallback();
+        });
+
+      } catch (err) {
+        console.warn('PeerJS Instantiation SecurityError:', err);
+        enableBroadcastFallback();
+      }
+    }
+
+    function enableBroadcastFallback() {
+      if (appState.useBroadcastFallback) return;
+      appState.useBroadcastFallback = true;
+      showToast('Mode Sandbox Terdeteksi: Diaktifkan Multi-Tab Sync', 'info');
+      setupBroadcastChannel();
+    }
+
+    function setupBroadcastChannel() {
+      if (!appState.roomCode) return;
+      if (appState.broadcastChannel) {
+        try { appState.broadcastChannel.close(); } catch(e){}
+      }
+
+      const channelName = 'playsphere_room_' + appState.roomCode;
+      appState.broadcastChannel = new BroadcastChannel(channelName);
+
+      appState.broadcastChannel.onmessage = (event) => {
+        const data = event.data;
+        if (!data) return;
+
+        // Broadcast Discovery logic for sandboxed tabs
+        if (data.type === 'BC_JOIN_REQUEST' && appState.role === 'host') {
+          appState.opponent.name = data.name;
+          appState.opponent.avatar = data.avatar;
+          updateGuestCardConnected();
+          enableHostStartButton();
+          
+          sendPeerData({
+            type: 'BC_JOIN_ACCEPT',
+            name: appState.user.name,
+            avatar: appState.user.avatar
+          });
+          showToast('Lawan bergabung via Multi-Tab!', 'success');
+        } else if (data.type === 'BC_JOIN_ACCEPT' && appState.role === 'guest') {
+          appState.opponent.name = data.name;
+          appState.opponent.avatar = data.avatar;
+          updateGuestCardConnected();
+          showToast('Terhubung ke Host via Multi-Tab!', 'success');
+        } else {
+          handleIncomingDataPacket(data);
+        }
+      };
+
+      if (appState.role === 'guest') {
+        // Announce join to host
+        setTimeout(() => {
+          sendPeerData({
+            type: 'BC_JOIN_REQUEST',
+            name: appState.user.name,
+            avatar: appState.user.avatar
+          });
+        }, 300);
+      }
+    }
+
+    function setupDataListeners() {
+      if (!appState.conn) return;
+
+      appState.conn.on('data', (data) => {
+        handleIncomingDataPacket(data);
+      });
+
+      appState.conn.on('close', () => {
+        showToast('Lawan telah meninggalkan permainan.', 'error');
+        setTimeout(() => goHome(), 2000);
+      });
+    }
+
+    function handleIncomingDataPacket(data) {
+      console.log('Menerima Data Packet:', data);
+
+      switch(data.type) {
+        case 'PROFILE_HANDSHAKE':
+          appState.opponent.name = data.name;
+          appState.opponent.avatar = data.avatar;
+          updateGuestCardConnected();
+          enableHostStartButton();
+          break;
+
+        case 'GAME_START':
+          appState.selectedGame = data.gameType;
+          appState.isMyTurn = (appState.role === 'guest') ? false : true;
+          launchGameplayScreen();
+          break;
+
+        case 'MOVE':
+          AudioEngine.playMove();
+          handleIncomingMove(data);
+          break;
+
+        case 'CHAT':
+          appendChatMessage(appState.opponent.name, data.text, false);
+          break;
+
+        case 'REMATCH_REQUEST':
+          showToast(`${appState.opponent.name} meminta main lagi!`, 'info');
+          resetMatchBoard();
+          break;
+      }
+    }
+
+    function sendPeerData(data) {
+      // Send via PeerJS connection if open
+      if (appState.conn && appState.conn.open) {
+        appState.conn.send(data);
+      }
+      // Broadcast via BroadcastChannel (works in sandboxed multi-tab environments)
+      if (appState.broadcastChannel) {
+        appState.broadcastChannel.postMessage(data);
+      }
+    }
+
+    // --- LOBBY NAVIGATION & ROOM MANAGEMENT ---
+    function switchLobbyTab(tab) {
+      appState.mode = tab;
+      const onlineBtn = document.getElementById('tabOnlineBtn');
+      const localBtn = document.getElementById('tabLocalBtn');
+      const onlineContent = document.getElementById('onlineTabContent');
+      const localContent = document.getElementById('localTabContent');
+
+      if (tab === 'online') {
+        onlineBtn.className = "flex-1 py-2.5 rounded-xl font-bold text-sm transition text-white bg-indigo-600 shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2";
+        localBtn.className = "flex-1 py-2.5 rounded-xl font-bold text-sm transition text-slate-400 hover:text-white flex items-center justify-center gap-2";
+        onlineContent.classList.remove('hidden');
+        localContent.classList.add('hidden');
+      } else {
+        localBtn.className = "flex-1 py-2.5 rounded-xl font-bold text-sm transition text-white bg-purple-600 shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2";
+        onlineBtn.className = "flex-1 py-2.5 rounded-xl font-bold text-sm transition text-slate-400 hover:text-white flex items-center justify-center gap-2";
+        localContent.classList.remove('hidden');
+        onlineContent.classList.add('hidden');
+      }
+    }
+
+    function generateRoomCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let result = '';
+      for (let i = 0; i < 6; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    }
+
+    function createNewRoom() {
+      appState.role = 'host';
+      appState.roomCode = generateRoomCode();
+      
+      document.getElementById('displayRoomCode').innerText = appState.roomCode;
+      document.getElementById('playerRoleBadge').innerText = 'Anda: HOST';
+      document.getElementById('hostNameLabel').innerText = appState.user.name;
+
+      initPeerServer('playsphere-room-' + appState.roomCode);
+
+      document.getElementById('lobbyScreen').classList.add('hidden');
+      document.getElementById('roomLobbyScreen').classList.remove('hidden');
+    }
+
+    function joinRoomByInput() {
+      const codeInput = document.getElementById('joinCodeInput').value.trim().toUpperCase();
+      if (codeInput.length < 4) {
+        showToast('Masukkan kode ruangan valid (contoh: 8A2F9B)', 'error');
+        return;
+      }
+
+      appState.role = 'guest';
+      appState.roomCode = codeInput;
+
+      document.getElementById('displayRoomCode').innerText = appState.roomCode;
+      document.getElementById('playerRoleBadge').innerText = 'Anda: GUEST (Lawan)';
+
+      // Set up Broadcast Channel immediately for fallback environments
+      setupBroadcastChannel();
+
+      // Attempt PeerJS as well
+      initPeerServer();
+
+      // Prepare UI transition
+      setTimeout(() => {
+        const hostPeerId = 'playsphere-room-' + appState.roomCode;
+        if (appState.peer) {
+          try {
+            appState.conn = appState.peer.connect(hostPeerId);
+            setupDataListeners();
+          } catch(e) {
+            enableBroadcastFallback();
+          }
+        }
+
+        document.getElementById('lobbyScreen').classList.add('hidden');
+        document.getElementById('roomLobbyScreen').classList.remove('hidden');
+        document.getElementById('gameSelectionPanel').classList.add('opacity-50', 'pointer-events-none');
+        document.getElementById('waitingNoticeText').innerText = '⏳ Menunggu Host memilih game dan memulai...';
+        showToast('Terhubung ke ruangan!', 'success');
+      }, 500);
+    }
+
+    function copyRoomCode() {
+      navigator.clipboard.writeText(appState.roomCode).then(() => {
+        const btnText = document.getElementById('copyCodeBtnText');
+        btnText.innerText = 'Tersalin!';
+        setTimeout(() => btnText.innerText = 'Salin Kode', 2000);
+        showToast('Kode ruangan berhasil disalin!', 'success');
+      });
+    }
+
+    function updateGuestCardConnected() {
+      document.getElementById('guestAvatarBox').innerHTML = '🎮';
+      document.getElementById('guestNameLabel').innerText = appState.opponent.name;
+      document.getElementById('guestNameLabel').classList.remove('text-slate-400');
+      document.getElementById('guestNameLabel').classList.add('text-white');
+      document.getElementById('guestStatusLabel').innerText = '● Terhubung';
+      document.getElementById('guestStatusLabel').className = 'text-xs text-emerald-400 font-semibold mt-0.5';
+    }
+
+    function enableHostStartButton() {
+      if (appState.role === 'host') {
+        const btn = document.getElementById('startGameBtn');
+        btn.disabled = false;
+        btn.className = "px-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white cursor-pointer font-extrabold rounded-xl transition shadow-lg shadow-emerald-600/30 flex items-center gap-2";
+        document.getElementById('waitingNoticeText').innerText = '✅ Semua pemain telah siap!';
+        document.getElementById('waitingNoticeText').className = 'text-xs text-emerald-400 font-semibold';
+      }
+    }
+
+    function selectGameType(gameType) {
+      if (appState.role !== 'host') return;
+      appState.selectedGame = gameType;
+
+      document.querySelectorAll('.game-opt-card').forEach(card => {
+        card.classList.remove('border-indigo-500');
+        card.classList.add('border-slate-800');
+      });
+
+      document.getElementById('gameOpt-' + gameType).classList.add('border-indigo-500');
+      document.getElementById('gameOpt-' + gameType).classList.remove('border-slate-800');
+    }
+
+    function hostStartGame() {
+      sendPeerData({
+        type: 'GAME_START',
+        gameType: appState.selectedGame
+      });
+
+      appState.isMyTurn = true; // Host plays first
+      launchGameplayScreen();
+    }
+
+    function startLocalMatch() {
+      appState.mode = 'local';
+      appState.role = 'host';
+      appState.opponent = { name: 'Pemain 2', avatar: '🤖' };
+      appState.isMyTurn = true;
+      
+      launchGameplayScreen();
+    }
+
+    // --- GAMEPLAY CONTROLLER ---
+    function launchGameplayScreen() {
+      document.getElementById('lobbyScreen').classList.add('hidden');
+      document.getElementById('roomLobbyScreen').classList.add('hidden');
+      document.getElementById('gameplayScreen').classList.remove('hidden');
+
+      // Update Player Headings
+      document.getElementById('p1Name').innerText = appState.user.name;
+      document.getElementById('p1Avatar').innerText = appState.user.avatar;
+      document.getElementById('p2Name').innerText = appState.opponent.name;
+      document.getElementById('p2Avatar').innerText = appState.opponent.avatar;
+
+      // Render Active Game Board
+      renderSelectedGameBoard();
+      updateTurnStatusUI();
+    }
+
+    function updateTurnStatusUI() {
+      const badge = document.getElementById('turnBadge');
+      const text = document.getElementById('turnText');
+
+      if (appState.isMyTurn) {
+        badge.className = "px-4 py-1.5 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold text-sm border border-emerald-500/40 flex items-center justify-center gap-2";
+        text.innerText = "Giliran Anda!";
+      } else {
+        badge.className = "px-4 py-1.5 rounded-full bg-amber-500/20 text-amber-300 font-extrabold text-sm border border-amber-500/40 flex items-center justify-center gap-2";
+        text.innerText = `Giliran ${appState.opponent.name}...`;
+      }
+    }
+
+    function renderSelectedGameBoard() {
+      const container = document.getElementById('dynamicBoardContainer');
+      container.innerHTML = '';
+
+      if (appState.selectedGame === 'tictactoe') {
+        document.getElementById('gameTitleHeader').innerText = 'TIC-TAC-TOE (3x3)';
+        renderTicTacToe(container);
+      } else if (appState.selectedGame === 'connect4') {
+        document.getElementById('gameTitleHeader').innerText = 'CONNECT 4 (EMPAT BERUNTUN)';
+        renderConnect4(container);
+      } else if (appState.selectedGame === 'dots') {
+        document.getElementById('gameTitleHeader').innerText = 'DOTS & BOXES (GARIS & KOTAK)';
+        renderDotsAndBoxes(container);
+      }
+    }
+
+    // --- GAME 1: TIC TAC TOE ---
+    function renderTicTacToe(container) {
+      const grid = document.createElement('div');
+      grid.className = 'grid grid-cols-3 gap-3 w-72 h-72';
+
+      for (let i = 0; i < 9; i++) {
+        const cell = document.createElement('button');
+        cell.className = 'bg-slate-900/90 hover:bg-slate-800 border-2 border-slate-700/80 rounded-2xl text-4xl font-black flex items-center justify-center transition active:scale-95 shadow-inner text-white';
+        cell.innerText = appState.tictactoeBoard[i];
+        cell.onclick = () => handleTicTacToeClick(i);
+        grid.appendChild(cell);
+      }
+
+      container.appendChild(grid);
+    }
+
+    function handleTicTacToeClick(index) {
+      if (!appState.isMyTurn || appState.tictactoeBoard[index] !== '') return;
+
+      const symbol = (appState.role === 'host') ? '❌' : '⭕';
+      appState.tictactoeBoard[index] = symbol;
+      AudioEngine.playMove();
+
+      if (appState.mode === 'online') {
+        sendPeerData({
+          type: 'MOVE',
+          game: 'tictactoe',
+          index: index,
+          symbol: symbol
+        });
+        appState.isMyTurn = false;
+      } else {
+        // Local mode toggle turn
+        appState.isMyTurn = !appState.isMyTurn;
+      }
+
+      renderSelectedGameBoard();
+      updateTurnStatusUI();
+      checkTicTacToeWinner();
+    }
+
+    function checkTicTacToeWinner() {
+      const b = appState.tictactoeBoard;
+      const winPatterns = [
+        [0,1,2], [3,4,5], [6,7,8], // rows
+        [0,3,6], [1,4,7], [2,5,8], // cols
+        [0,4,8], [2,4,6]           // diagonals
+      ];
+
+      for (let pattern of winPatterns) {
+        const [a, bIdx, c] = pattern;
+        if (b[a] && b[a] === b[bIdx] && b[a] === b[c]) {
+          const winnerName = (b[a] === '❌') ? appState.user.name : appState.opponent.name;
+          showMatchResult(winnerName + ' Menang!', 'Selamat atas kemenangan telak ini!');
+          return;
+        }
+      }
+
+      if (b.every(cell => cell !== '')) {
+        showMatchResult('Hasil Seri!', 'Permainan yang sangat seimbang.');
+      }
+    }
+
+    // --- GAME 2: CONNECT 4 ---
+    function renderConnect4(container) {
+      const grid = document.createElement('div');
+      grid.className = 'grid grid-cols-7 gap-2 bg-indigo-950 p-4 rounded-2xl border-4 border-indigo-700 shadow-2xl';
+
+      for (let i = 0; i < 42; i++) {
+        const cell = document.createElement('div');
+        const color = appState.connect4Board[i] || 'bg-slate-900';
+        cell.className = `w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-indigo-900 ${color} cursor-pointer transition flex items-center justify-center hover:opacity-80`;
+        cell.onclick = () => handleConnect4Click(i % 7);
+        grid.appendChild(cell);
+      }
+
+      container.appendChild(grid);
+    }
+
+    function handleConnect4Click(col) {
+      if (!appState.isMyTurn) return;
+
+      // Drop coin to bottom available row
+      let targetIdx = -1;
+      for (let row = 5; row >= 0; row--) {
+        const idx = row * 7 + col;
+        if (!appState.connect4Board[idx]) {
+          targetIdx = idx;
+          break;
+        }
+      }
+
+      if (targetIdx === -1) return; // Column full
+
+      const colorClass = (appState.role === 'host') ? 'bg-amber-400' : 'bg-rose-500';
+      appState.connect4Board[targetIdx] = colorClass;
+      AudioEngine.playMove();
+
+      if (appState.mode === 'online') {
+        sendPeerData({
+          type: 'MOVE',
+          game: 'connect4',
+          index: targetIdx,
+          color: colorClass
+        });
+        appState.isMyTurn = false;
+      } else {
+        appState.isMyTurn = !appState.isMyTurn;
+      }
+
+      renderSelectedGameBoard();
+      updateTurnStatusUI();
+    }
+
+    // --- GAME 3: DOTS & BOXES ---
+    function renderDotsAndBoxes(container) {
+      const boxContainer = document.createElement('div');
+      boxContainer.className = 'flex flex-col items-center justify-center p-4 bg-slate-900 rounded-2xl border border-slate-800 space-y-2';
+      boxContainer.innerHTML = '<p class="text-xs text-slate-400">Klik garis horizontal / vertikal antar titik untuk mengklaim kotak.</p>';
+      
+      const grid = document.createElement('div');
+      grid.className = 'grid grid-cols-3 gap-4 p-4';
+
+      for (let i = 0; i < 9; i++) {
+        const dotBox = document.createElement('button');
+        const isClaimed = appState.dotsBoard.boxes[i];
+        dotBox.className = `w-16 h-16 rounded-xl border-2 font-bold text-xs flex items-center justify-center transition ${isClaimed ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-500 hover:border-indigo-500'}`;
+        dotBox.innerText = isClaimed ? isClaimed : `Kotak ${i+1}`;
+        dotBox.onclick = () => claimDotBox(i);
+        grid.appendChild(dotBox);
+      }
+
+      boxContainer.appendChild(grid);
+      container.appendChild(boxContainer);
+    }
+
+    function claimDotBox(idx) {
+      if (!appState.isMyTurn || appState.dotsBoard.boxes[idx]) return;
+
+      const owner = (appState.role === 'host') ? appState.user.name : appState.opponent.name;
+      appState.dotsBoard.boxes[idx] = owner;
+      AudioEngine.playMove();
+
+      if (appState.mode === 'online') {
+        sendPeerData({
+          type: 'MOVE',
+          game: 'dots',
+          index: idx,
+          owner: owner
+        });
+        appState.isMyTurn = false;
+      } else {
+        appState.isMyTurn = !appState.isMyTurn;
+      }
+
+      renderSelectedGameBoard();
+      updateTurnStatusUI();
+    }
+
+    function handleIncomingMove(data) {
+      if (data.game === 'tictactoe') {
+        appState.tictactoeBoard[data.index] = data.symbol;
+        checkTicTacToeWinner();
+      } else if (data.game === 'connect4') {
+        appState.connect4Board[data.index] = data.color;
+      } else if (data.game === 'dots') {
+        appState.dotsBoard.boxes[data.index] = data.owner;
+      }
+
+      appState.isMyTurn = true;
+      renderSelectedGameBoard();
+      updateTurnStatusUI();
+    }
+
+    // --- LIVE CHAT & UTILITIES ---
+    function sendChatMessage() {
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      appendChatMessage(appState.user.name, text, true);
+      sendPeerData({ type: 'CHAT', text: text });
+      input.value = '';
+    }
+
+    function sendQuickEmoji(emoji) {
+      appendChatMessage(appState.user.name, emoji, true);
+      sendPeerData({ type: 'CHAT', text: emoji });
+    }
+
+    function appendChatMessage(sender, text, isMe) {
+      const container = document.getElementById('chatMessages');
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `p-2 rounded-xl text-xs max-w-[85%] ${isMe ? 'bg-indigo-600 text-white ml-auto text-right' : 'bg-slate-800 text-slate-200 mr-auto'}`;
+      msgDiv.innerHTML = `<span class="block font-bold text-[10px] opacity-75">${sender}</span>${text}`;
+      container.appendChild(msgDiv);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function showMatchResult(title, subtitle) {
+      AudioEngine.playWin();
+      triggerConfetti();
+
+      document.getElementById('resultTitle').innerText = title;
+      document.getElementById('resultSubtitle').innerText = subtitle;
+      document.getElementById('resultModal').classList.remove('hidden');
+    }
+
+    function requestRematch() {
+      resetMatchBoard();
+      document.getElementById('resultModal').classList.add('hidden');
+      sendPeerData({ type: 'REMATCH_REQUEST' });
+      showToast('Permintaan main lagi terkirim!', 'info');
+    }
+
+    function resetMatchBoard() {
+      appState.tictactoeBoard = Array(9).fill('');
+      appState.connect4Board = Array(42).fill('');
+      appState.dotsBoard = { lines: {}, boxes: {} };
+      renderSelectedGameBoard();
+    }
+
+    function closeResultModalAndLobby() {
+      document.getElementById('resultModal').classList.add('hidden');
+      goHome();
+    }
+
+    function confirmLeaveGame() {
+      if (confirm('Yakin ingin keluar dari game saat ini?')) {
+        goHome();
+      }
+    }
+
+    function goHome() {
+      if (appState.peer) appState.peer.destroy();
+      location.reload();
+    }
+
+    // --- CONFETTI CANVASES ENGINE ---
+    function triggerConfetti() {
+      const canvas = document.getElementById('confettiCanvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      const particles = [];
+      const colors = ['#6366f1', '#a855f7', '#ec4899', '#10b981', '#f59e0b'];
+
+      for (let i = 0; i < 100; i++) {
+        particles.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height - canvas.height,
+          size: Math.random() * 8 + 4,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          vy: Math.random() * 5 + 2,
+          vx: Math.random() * 2 - 1
+        });
+      }
+
+      function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(p => {
+          p.y += p.vy;
+          p.x += p.vx;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        if (particles.some(p => p.y < canvas.height)) {
+          requestAnimationFrame(animate);
+        }
+      }
+      animate();
+    }
+
+    // --- PROFILE MODAL & TOASTS ---
+    function openProfileModal() {
+      document.getElementById('profileModal').classList.remove('hidden');
+    }
+
+    function closeProfileModal() {
+      document.getElementById('profileModal').classList.add('hidden');
+    }
+
+    function setAvatar(emoji) {
+      appState.user.avatar = emoji;
+      document.getElementById('userAvatarBadge').innerText = emoji;
+    }
+
+    function saveProfile() {
+      const name = document.getElementById('nicknameInput').value.trim();
+      if (name) {
+        appState.user.name = name;
+        document.getElementById('userNameBadge').innerText = name;
+      }
+      closeProfileModal();
+      showToast('Profil diperbarui!', 'success');
+    }
+
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      
+      const bgColor = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-rose-600' : 'bg-indigo-600';
+      toast.className = `${bgColor} text-white px-4 py-3 rounded-xl shadow-xl text-xs font-bold flex items-center gap-2 animate-in slide-in-from-top duration-200 pointer-events-auto`;
+      toast.innerHTML = `<i class="fa-solid fa-circle-info"></i> ${msg}`;
+      
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+  </script>
+</body>
+</html>
